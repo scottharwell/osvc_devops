@@ -34,50 +34,64 @@ class PostCommitHook {
 	const WEBDAV_PASSWORD_CONFIG = "osvc.webdav.password";
 
 	/**
+	 * The git config that will be used to identify the working branch to push changes to WebDAV
+	 */
+	const COMMIT_BRANCH = "osvc.webdav.branch";
+
+	/**
 	 * The primary method for the class
 	 * @return null
 	 */
 	public static function run(){
 		
-		echo "\n-----RUNNING GIT HOOK-----\n";
+		echo "\n-----RUNNING POST-COMMIT GIT HOOK-----\n";
+
+		$commitBranch = static::getGitConfig(static::COMMIT_BRANCH);
+		$currentBranch = static::getCurrentBranch();
+
+		if($currentBranch == $commitBranch){
 		
-		//Get the list of files changed from Git
-		$files = static::getCPFilesChanged();
+			//Get the list of files changed from Git
+			$files = static::getCPFilesChanged();
 
-		//If we have not programatically set the WebDAV URL for CP in this hook, then
-		//see if the developer has set a git parameter to get it (osvc.webdav)
-		$webDAVUrl = static::getGitConfig(static::WEBDAV_URL_CONFIG);
-		$webDAVUser = static::getGitConfig(static::WEBDAV_USER_CONFIG);
-		$webDAVPassword = static::getGitConfig(static::WEBDAV_PASSWORD_CONFIG);
+			//If we have not programatically set the WebDAV URL for CP in this hook, then
+			//see if the developer has set a git parameter to get it (osvc.webdav)
+			$webDAVUrl = static::getGitConfig(static::WEBDAV_URL_CONFIG);
+			$webDAVUser = static::getGitConfig(static::WEBDAV_USER_CONFIG);
+			$webDAVPassword = static::getGitConfig(static::WEBDAV_PASSWORD_CONFIG);
 
-		if(!empty($webDAVUrl)){
-			if(!empty($files['d'])){
-				echo "Deleting files from WebDAV\n";
-				//print_r($files['d']);
+			if(!empty($webDAVUrl)){
+				if(!empty($files['d'])){
+					echo "Deleting files from WebDAV\n";
+					//print_r($files['d']);
 
-				//Delete files removed from repo
-				foreach($files['d'] as $remotePath){
-					static::deleteFile($webDAVUrl, $remotePath, $webDAVUser, $webDAVPassword);
+					//Delete files removed from repo
+					foreach($files['d'] as $remotePath){
+						static::deleteFile($webDAVUrl, $remotePath, $webDAVUser, $webDAVPassword);
+					}
+
+					echo "Finished deleting.";
 				}
-
-				echo "Finished deleting.";
+				
+				if(!empty($files['m'])){
+					echo "Pushing files to WebDAV\n";
+					//print_r($files['m']);
+					//Put files from repo
+					foreach($files['m'] as $fileArr){
+						static::putFile($webDAVUrl, $fileArr['remote'], $fileArr['local'], $webDAVUser, $webDAVPassword);
+					}
+					echo "Finished uploading.";
+				}
 			}
-			
-			if(!empty($files['m'])){
-				echo "Pushing files to WebDAV\n";
-				//print_r($files['m']);
-				//Put files from repo
-				foreach($files['m'] as $fileArr){
-					static::putFile($webDAVUrl, $fileArr['remote'], $fileArr['local'], $webDAVUser, $webDAVPassword);
-				}
-				echo "Finished uploading.";
+			else{
+				echo "No WebDAV URL was set. If you want to push to WebDAV, set the CP URL in the osvc.webdav.url git config.\n";
 			}
 		}
 		else{
-			echo "No WebDAV URL was set. If you want to push to WebDAV, set the CP URL in the osvc.webdav.url git config.\n";
+			echo "Current branch ({$currentBranch}) differs from deploy branch ({$commitBranch}). Will not push files to WebDAV.\n";
 		}
 
-		echo "\n-----GIT HOOK DONE-----\n\n";
+		echo "-----GIT HOOK DONE-----\n\n";
 	}
 
 	/**
@@ -108,6 +122,21 @@ class PostCommitHook {
 		}
 
 		return $fileArray;
+	}
+
+	/**
+	 * Get's the text of the current git branch from git commands.
+	 * @return String The name of the working branch.
+	 */
+	private static function getCurrentBranch(){
+		$output;
+		exec("git branch | grep \*", $output);
+		if(sizeof($output) > 0){
+			$branch = preg_replace("/\S+\s+/", "", $output[0]);
+			return $branch;
+		}
+
+		return false;
 	}
 
 	/**
