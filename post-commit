@@ -85,7 +85,7 @@ class PostCommitHook {
 						static::deleteFile($webDAVUrl, $remotePath, $webDAVUser, $webDAVPassword);
 					}
 
-					echo "Finished deleting.";
+					echo "Finished deleting.\n";
 				}
 				
 				if(!empty($files['m'])){
@@ -95,7 +95,7 @@ class PostCommitHook {
 					foreach($files['m'] as $fileArr){
 						static::putFile($webDAVUrl, $fileArr['remote'], $fileArr['local'], $webDAVUser, $webDAVPassword);
 					}
-					echo "Finished uploading.";
+					echo "Finished uploading.\n";
 				}
 			}
 			else{
@@ -192,6 +192,8 @@ class PostCommitHook {
 		curl_setopt($ch, CURLOPT_URL, $url);
 		curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 
 		$results = curl_exec($ch);
@@ -230,6 +232,8 @@ class PostCommitHook {
 		curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
 		curl_setopt($ch, CURLOPT_PUT, 1);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
 
 		$fh_res = fopen($localPath, 'r');
