@@ -1,11 +1,26 @@
-#!/usr/bin/php
+#!/usr/bin/env php
 <?php
+
+/**
+ * Git hook to publish changes to OSvC WebDAV site upon git commit.
+ * This hook allows for commits to a working branch and push to a site
+ * so that a developer's workflow can maintain a source control edit history
+ * while publishing to WebDAV.
+ * 
+ * @author Scott Harwell <scott@harwell.me>
+ * @copyright Copyright Scott Harwell 2015
+ */
 
 class PostCommitHook {
 	/**
 	 * Git command to get the latest changes to the branch
 	 */
 	const GIT_LIST_FILES_COMMAND = "git diff-tree --no-commit-id --name-status -r HEAD";
+
+	/**
+	 * Git and grep command to get the current branch
+	 */
+	const GIT_LIST_BRANCH_COMMAND = "git branch | grep \*";
 	
 	/**
 	 * Regular expression to remove the local "Customer Portal" folder that should exist in a repo for this
@@ -130,7 +145,7 @@ class PostCommitHook {
 	 */
 	private static function getCurrentBranch(){
 		$output;
-		exec("git branch | grep \*", $output);
+		exec(static::GIT_LIST_BRANCH_COMMAND, $output);
 		if(sizeof($output) > 0){
 			$branch = preg_replace("/\S+\s+/", "", $output[0]);
 			return $branch;
