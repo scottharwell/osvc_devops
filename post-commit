@@ -8,7 +8,9 @@
  * while publishing to WebDAV.
  * 
  * @author Scott Harwell <scott@harwell.me>
- * @copyright Copyright Scott Harwell 2015
+ * @copyright Copyright Scott Harwell 2015, 2016, 2017
+ * @license MIT
+ * @version 1.0
  */
 
 class PostCommitHook {
@@ -26,7 +28,7 @@ class PostCommitHook {
 	 * Regular expression to remove the local "Customer Portal" folder that should exist in a repo for this
 	 * hook to work.
 	 */
-	const CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP = "/^.*Customer\sPortal[\\|\/]/";
+	const CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP = "/^.*Customer\sPortal[\\|\/].*(?=dav)/i";
 
 	/**
 	 * Removes git commit output from the diff command
@@ -49,8 +51,13 @@ class PostCommitHook {
 	const WEBDAV_PASSWORD_CONFIG = "osvc.webdav.password";
 
 	/**
-	 * The git config that will be used to identify the working branch to push changes to WebDAV
+	 * Git config to store a proxy server for cURL calls
 	 */
+	const WEBDAV_CURL_PROXY = "osvc.webdav.proxy";
+	
+	/**
+	* The git config that will be used to identify the working branch to push changes to WebDAV
+	*/
 	const COMMIT_BRANCH = "osvc.webdav.branch";
 
 	/**
@@ -60,6 +67,10 @@ class PostCommitHook {
 	public static function run(){
 		
 		echo "\n-----RUNNING POST-COMMIT GIT HOOK-----\n";
+
+		if  (!in_array ('curl', get_loaded_extensions())) {
+			throw new Exception("cURL extension not loaded.");
+		}
 
 		$commitBranch = static::getGitConfig(static::COMMIT_BRANCH);
 		$currentBranch = static::getCurrentBranch();
@@ -123,7 +134,7 @@ class PostCommitHook {
 			if(preg_match(self::CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP, $path)){
 				//Remove the path that does not conform to OSvC DAV path patterns
 				$remotePath = preg_replace(self::CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP,"", $path);
-				$localPath = preg_replace(self::CUSTOMER_PORTAL_LOCAL_DEV_FOLDER_EXP,"", $path);
+				$localPath = realpath(preg_replace(self::CUSTOMER_PORTAL_LOCAL_DEV_FOLDER_EXP,"", $path));
 
 				//Determine if the file was added/modified or deleted
 				if($path[0] == 'D'){
@@ -179,13 +190,15 @@ class PostCommitHook {
 	 * @return null
 	 */
 	private static function deleteFile($url, $path, $username, $password){
-		if(!preg_match("/^(http|https)/", $url)){
+		if(!preg_match("/^http/", $url)){
 			$url = "https://" . $url;
 		}
 
 		$url = $url . "/" . $path;
 
 		echo $path . "\n";
+
+		$proxy = static::getGitConfig(static::WEBDAV_CURL_PROXY);
 
 		$ch = curl_init();
 
@@ -194,7 +207,14 @@ class PostCommitHook {
 		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
 		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+		curl_setopt($ch, CURLOPT_VERBOSE, false);
+
+		if(!empty($proxy)){
+			curl_setopt($ch, CURLOPT_PROXY, $proxy);
+		}
 
 		$results = curl_exec($ch);
 
@@ -217,7 +237,7 @@ class PostCommitHook {
 	 * @return null
 	 */
 	private static function putFile($url, $path, $localPath, $username, $password){
-		if(!preg_match("/^(http|https)/", $url)){
+		if(!preg_match("/^http/", $url)){
 			$url = "https://" . $url;
 		}
 
@@ -225,31 +245,45 @@ class PostCommitHook {
 
 		$fileSize = filesize($localPath);
 		echo $localPath . " " . $fileSize . "\n";
-
-		$ch = curl_init();
-
-		curl_setopt($ch, CURLOPT_URL, $url);
-		curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
-		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
-		curl_setopt($ch, CURLOPT_PUT, 1);
-		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
-		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-
+		
 		$fh_res = fopen($localPath, 'r');
 
-		curl_setopt($ch, CURLOPT_INFILE, $fh_res);
-		curl_setopt($ch, CURLOPT_INFILESIZE, filesize($localPath));
+		if($fh_res){
+			$proxy = static::getGitConfig(static::WEBDAV_CURL_PROXY);
 
-		$results = curl_exec($ch);
-		if(curl_errno($ch)){
-			echo "Error putting file: " . $url . "\n";
-			print "Error: " . curl_error($ch); 
-			echo "\n";
+			$ch = curl_init();
+		
+			curl_setopt($ch, CURLOPT_URL, $url);
+			curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
+			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+			curl_setopt($ch, CURLOPT_PUT, 1);
+			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+			curl_setopt($ch, CURLOPT_TIMEOUT, 45);
+			curl_setopt($ch, CURLOPT_VERBOSE, false);
+				
+			curl_setopt($ch, CURLOPT_INFILE, $fh_res);
+			curl_setopt($ch, CURLOPT_INFILESIZE, $fileSize);
+			
+			if(!empty($proxy)){
+				curl_setopt($ch, CURLOPT_PROXY, $proxy);
+			}
+
+			$results = curl_exec($ch);
+			if(curl_errno($ch)){
+				echo "Error putting file: " . $url . "\n";
+				print "Error: " . curl_error($ch); 
+				echo "\n";
+			}
+
+			curl_close($ch);
+			
+			fclose($fh_res);
+		} else{
+			throw new Exception("Unable to open file! " . $localPath);
 		}
-
-		curl_close($ch);
-
 	}
 }
 
