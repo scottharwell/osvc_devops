@@ -72,4 +72,4 @@ My typical workflow with this hook is to have an active working branch called `t
 6. Squash merge my test branch (`git merge -Xtheirs --squash develop`)
 7. Delete my test branch (`git branch -d test`)
 
-![animated gif](http://i.imgur.com/1v6KWD1.gifv)
+![animated gif](http://i.imgur.com/1v6KWD1.gif)
