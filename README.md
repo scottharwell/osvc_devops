@@ -34,11 +34,16 @@ The important part is the Customer Portal folder.  The hook expects this folder 
 
 The hook relies on a few configurations to connect to OSvC.  Those properties are:
 
-* `osvc.webdav.url` (URL to WebDAV root i.e. https://sharwell.myrightnowsite.com)
-* `osvc.webdav.username`
-* `osvc.webdav.password`
-* `osvc.webdav.branch` (The working branch that will be used to determine if pushes to webdav should happen.  Any commit not on this branch will not push to WebDAV.)
-* `osvc.webdav.proxy` (used only if your network requires an HTTP proxy, which is required for cURL to operate in some of these hooks.)
+### Required Configs
+
+* `osvc.webdav.url "https://sharwell.myrightnowsite.com"` (URL to WebDAV root)
+* `osvc.webdav.username "webdav_username"`
+* `osvc.webdav.password "webdav_password"` (**Note:** This does store your webdav password in plain text in your git configs.  Be sure to treat this with care.)
+* `osvc.webdav.branch test` (The working branch that will be used to determine if pushes to webdav should happen.  Any commit not on this branch will not push to WebDAV.)
+
+#### Optional Configs
+
+* `osvc.webdav.proxy "http://proxy.url"` (used only if your network requires an HTTP proxy, which is required for cURL to operate in some of these hooks.)
 
 The primary caveate in this workflow is that you can only work on one interface at a time since the `url` parameter limits pushing to a particular interface.
 
@@ -66,3 +71,5 @@ My typical workflow with this hook is to have an active working branch called `t
 5. Checkout develop branch (`git checkout develop`)
 6. Squash merge my test branch (`git merge -Xtheirs --squash develop`)
 7. Delete my test branch (`git branch -d test`)
+
+![Demo](http://i.imgur.com/1v6KWD1.gifv)
