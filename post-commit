@@ -6,285 +6,310 @@
  * This hook allows for commits to a working branch and push to a site
  * so that a developer's workflow can maintain a source control edit history
  * while publishing to WebDAV.
- * 
+ *
  * @author Scott Harwell <scott@harwell.me>
- * @copyright Copyright Scott Harwell 2015, 2016, 2017
- * @license MIT
- * @version 1.0
+ * @copyright Copyright Scott Harwell 2015
  */
 
-class PostCommitHook {
-	/**
-	 * Git command to get the latest changes to the branch
-	 */
-	const GIT_LIST_FILES_COMMAND = "git diff-tree --no-commit-id --name-status -r HEAD";
+class PostCommitHook
+{
+    /**
+     * Git command to get the latest changes to the branch
+     */
+    const GIT_LIST_FILES_COMMAND = "git diff-tree --no-commit-id --name-status -r HEAD";
 
-	/**
-	 * Git and grep command to get the current branch
-	 */
-	const GIT_LIST_BRANCH_COMMAND = "git branch | grep \*";
-	
-	/**
-	 * Regular expression to remove the local "Customer Portal" folder that should exist in a repo for this
-	 * hook to work.
-	 */
-	const CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP = "/^.*Customer\sPortal[\\|\/].*(?=dav)/i";
+    /**
+     * Git and grep command to get the current branch
+     */
+    const GIT_LIST_BRANCH_COMMAND = "git branch | grep \*";
+    
+    /**
+     * Regular expression to remove the local "Customer Portal" folder that should exist in a repo for this
+     * hook to work.
+     */
+    const CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP = "/^.*Customer\sPortal[\\|\/].*(?=dav)/i";
 
-	/**
-	 * Removes git commit output from the diff command
-	 */
-	const CUSTOMER_PORTAL_LOCAL_DEV_FOLDER_EXP = "/^[A-Z]\s+/";
+    /**
+     * Removes git commit output from the diff command
+     */
+    const CUSTOMER_PORTAL_LOCAL_DEV_FOLDER_EXP = "/^[A-Z]\s+/";
 
-	/**
-	 * The git config that will be examined to get the CP webdav URL
-	 */
-	const WEBDAV_URL_CONFIG = "osvc.webdav.url";
+    /**
+     * The git config that will be examined to get the CP webdav URL
+     */
+    const WEBDAV_URL_CONFIG = "osvc.webdav.url";
 
-	/**
-	 * The git config that will be examined to get the CP webdav username
-	 */
-	const WEBDAV_USER_CONFIG = "osvc.webdav.username";
+    /**
+     * The git config that will be examined to get the CP webdav username
+     */
+    const WEBDAV_USER_CONFIG = "osvc.webdav.username";
 
-	/**
-	 * The git config that will be examined to get the CP webdav password
-	 */
-	const WEBDAV_PASSWORD_CONFIG = "osvc.webdav.password";
+    /**
+     * The git config that will be examined to get the CP webdav password
+     */
+    const WEBDAV_PASSWORD_CONFIG = "osvc.webdav.password";
 
-	/**
-	 * Git config to store a proxy server for cURL calls
-	 */
-	const WEBDAV_CURL_PROXY = "osvc.webdav.proxy";
-	
-	/**
-	* The git config that will be used to identify the working branch to push changes to WebDAV
-	*/
-	const COMMIT_BRANCH = "osvc.webdav.branch";
+    /**
+     * Git config to store a proxy server for cURL calls
+     */
+    const WEBDAV_CURL_PROXY = "osvc.webdav.proxy";
+    
+    /**
+        * The git config that will be used to identify the working branch to push changes to WebDAV
+        */
+    const COMMIT_BRANCH = "osvc.webdav.branch";
 
-	/**
-	 * The primary method for the class
-	 * @return null
-	 */
-	public static function run(){
-		
-		echo "\n-----RUNNING POST-COMMIT GIT HOOK-----\n";
+    /**
+     * The primary method for the class
+     * @return null
+     */
+    public static function run()
+    {
+        
+        echo "\n-----RUNNING POST-COMMIT GIT HOOK-----\n";
 
-		if  (!in_array ('curl', get_loaded_extensions())) {
-			throw new Exception("cURL extension not loaded.");
-		}
+        if (!in_array ('curl', get_loaded_extensions())) {
+            throw new Exception("cURL extension not loaded.");
+        }
 
-		$commitBranch = static::getGitConfig(static::COMMIT_BRANCH);
-		$currentBranch = static::getCurrentBranch();
+        $commitBranch = static::getGitConfig(static::COMMIT_BRANCH);
+        $currentBranch = static::getCurrentBranch();
 
-		if($currentBranch == $commitBranch){
-		
-			//Get the list of files changed from Git
-			$files = static::getCPFilesChanged();
+        if ($currentBranch == $commitBranch) {
+            //Get the list of files changed from Git
+            $files = static::getCPFilesChanged();
 
-			//If we have not programatically set the WebDAV URL for CP in this hook, then
-			//see if the developer has set a git parameter to get it (osvc.webdav)
-			$webDAVUrl = static::getGitConfig(static::WEBDAV_URL_CONFIG);
-			$webDAVUser = static::getGitConfig(static::WEBDAV_USER_CONFIG);
-			$webDAVPassword = static::getGitConfig(static::WEBDAV_PASSWORD_CONFIG);
+            //If we have not programatically set the WebDAV URL for CP in this hook, then
+            //see if the developer has set a git parameter to get it (osvc.webdav)
+            $webDAVUrl = static::getGitConfig(static::WEBDAV_URL_CONFIG);
+            $webDAVUser = static::getGitConfig(static::WEBDAV_USER_CONFIG);
+            $webDAVPassword = static::getGitConfig(static::WEBDAV_PASSWORD_CONFIG);
 
-			if(!empty($webDAVUrl)){
-				if(!empty($files['d'])){
-					echo "Deleting files from WebDAV\n";
-					//print_r($files['d']);
+            if (!empty($webDAVUrl)) {
+                if (!empty($files['d'])) {
+                    echo "Deleting files from WebDAV\n";
+                    //print_r($files['d']);
 
-					//Delete files removed from repo
-					foreach($files['d'] as $remotePath){
-						static::deleteFile($webDAVUrl, $remotePath, $webDAVUser, $webDAVPassword);
-					}
+                    try {
+                    //Delete files removed from repo
+                        foreach ($files['d'] as $remotePath) {
+                            static::deleteFile($webDAVUrl, $remotePath, $webDAVUser, $webDAVPassword);
+                        }
+                        echo "Finished deleting.\n";
+                    } catch (\Exception $e) {
+                        echo sprintf("EXCEPTION THROWN\n%s\n", $e->getMessage());
+                    }
+                }
+                
+                if (!empty($files['m'])) {
+                    echo "Pushing files to WebDAV\n";
+                    //print_r($files['m']);
+                    try {
+                    //Put files from repo
+                        foreach ($files['m'] as $fileArr) {
+                            static::putFile($webDAVUrl, $fileArr['remote'], $fileArr['local'], $webDAVUser, $webDAVPassword);
+                        }
+                        echo "Finished uploading.\n";
+                    } catch (\Exception $e) {
+                        echo sprintf("EXCEPTION THROWN\n%s\n", $e->getMessage());
+                    }
+                }
+            } else {
+                echo "No WebDAV URL was set. If you want to push to WebDAV, set the CP URL in the osvc.webdav.url git config.\n";
+            }
+        } else {
+            echo "Current branch ({$currentBranch}) differs from deploy branch ({$commitBranch}). Will not push files to WebDAV.\n";
+        }
 
-					echo "Finished deleting.\n";
-				}
-				
-				if(!empty($files['m'])){
-					echo "Pushing files to WebDAV\n";
-					//print_r($files['m']);
-					//Put files from repo
-					foreach($files['m'] as $fileArr){
-						static::putFile($webDAVUrl, $fileArr['remote'], $fileArr['local'], $webDAVUser, $webDAVPassword);
-					}
-					echo "Finished uploading.\n";
-				}
-			}
-			else{
-				echo "No WebDAV URL was set. If you want to push to WebDAV, set the CP URL in the osvc.webdav.url git config.\n";
-			}
-		}
-		else{
-			echo "Current branch ({$currentBranch}) differs from deploy branch ({$commitBranch}). Will not push files to WebDAV.\n";
-		}
+        echo "-----GIT HOOK DONE-----\n\n";
+    }
 
-		echo "-----GIT HOOK DONE-----\n\n";
-	}
+    /**
+     * Runs the git diff-tree command and formats the output into modified or deleted files arrays.
+     * @return array An array of the modified files in the commit.
+     */
+    private static function getCPFilesChanged()
+    {
+        $output;
+        exec(self::GIT_LIST_FILES_COMMAND, $output);
 
-	/**
-	 * Runs the git diff-tree command and formats the output into modified or deleted files arrays.
-	 * @return array An array of the modified files in the commit.
-	 */
-	private static function getCPFilesChanged(){
-		$output;
-		exec(self::GIT_LIST_FILES_COMMAND, $output);
+        //Array to store only CP files changed
+        $fileArray = ['m' => [], 'd' => [], 'output' => $output];
+        foreach ($output as $path) {
+            if (preg_match(self::CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP, $path)) {
+                //Remove the path that does not conform to OSvC DAV path patterns
+                $remotePath = preg_replace(self::CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP, "", $path);
+                $localPath = realpath(preg_replace(self::CUSTOMER_PORTAL_LOCAL_DEV_FOLDER_EXP, "", $path));
 
-		//Array to store only CP files changed
-		$fileArray = ['m' => [], 'd' => [], 'output' => $output];
-		foreach($output as $path){
-			if(preg_match(self::CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP, $path)){
-				//Remove the path that does not conform to OSvC DAV path patterns
-				$remotePath = preg_replace(self::CUSTOMER_PORTAL_REMOTE_DEV_FOLDER_EXP,"", $path);
-				$localPath = realpath(preg_replace(self::CUSTOMER_PORTAL_LOCAL_DEV_FOLDER_EXP,"", $path));
+                //Determine if the file was added/modified or deleted
+                if ($path[0] == 'D') {
+                    $fileArray['d'][] = $remotePath;
+                } else {
+                    $paths = ['local' => $localPath, 'remote' => $remotePath];
+                    $fileArray['m'][] = $paths;
+                }
+            }
+        }
 
-				//Determine if the file was added/modified or deleted
-				if($path[0] == 'D'){
-					$fileArray['d'][] = $remotePath;
-				}
-				else {
-					$paths = ['local' => $localPath, 'remote' => $remotePath];
-					$fileArray['m'][] = $paths;
-				}	
-			}
-		}
+        return $fileArray;
+    }
 
-		return $fileArray;
-	}
+    /**
+     * Get's the text of the current git branch from git commands.
+     * @return String The name of the working branch.
+     */
+    private static function getCurrentBranch()
+    {
+        $output;
+        exec(static::GIT_LIST_BRANCH_COMMAND, $output);
+        if (sizeof($output) > 0) {
+            $branch = preg_replace("/\S+\s+/", "", $output[0]);
+            return $branch;
+        }
 
-	/**
-	 * Get's the text of the current git branch from git commands.
-	 * @return String The name of the working branch.
-	 */
-	private static function getCurrentBranch(){
-		$output;
-		exec(static::GIT_LIST_BRANCH_COMMAND, $output);
-		if(sizeof($output) > 0){
-			$branch = preg_replace("/\S+\s+/", "", $output[0]);
-			return $branch;
-		}
+        return false;
+    }
 
-		return false;
-	}
+    /**
+     * Helper method to get git configs
+     * @param  string $param The git config
+     * @return mixed Will return the result of the git config call or false.
+     */
+    private static function getGitConfig($param)
+    {
+        $output;
+        exec("git config " . $param, $output);
+        $outputStr = implode("", $output);
+        if (!preg_match("/^error/", $outputStr)) {
+            return trim($outputStr);
+        }
 
-	/**
-	 * Helper method to get git configs
-	 * @param  string $param The git config
-	 * @return mixed Will return the result of the git config call or false.
-	 */
-	private static function getGitConfig($param){
-		$output;
-		exec("git config " . $param, $output);
-		$outputStr = implode("", $output);
-		if(!preg_match("/^error/", $outputStr)){
-			return trim($outputStr);
-		}
+        return false;
+    }
 
-		return false;
-	}
+    /**
+     * Calls the WebDAV delete method.
+     * @param  String $url      The domain of the site to push to.
+     * @param  String $path     The remote file path.
+     * @param  String $username The WebDAV username.
+     * @param  String $password The WebDAV password.
+     * @return null
+     */
+    private static function deleteFile($url, $path, $username, $password)
+    {
+        if (!preg_match("/^(http|https)/", $url)) {
+            $url = "https://" . $url;
+        }
 
-	/**
-	 * Calls the WebDAV delete method.
-	 * @param  String $url      The domain of the site to push to.
-	 * @param  String $path     The remote file path.
-	 * @param  String $username The WebDAV username.
-	 * @param  String $password The WebDAV password.
-	 * @return null
-	 */
-	private static function deleteFile($url, $path, $username, $password){
-		if(!preg_match("/^http/", $url)){
-			$url = "https://" . $url;
-		}
+        $url = $url . "/" . $path;
 
-		$url = $url . "/" . $path;
+        echo $path . "\n";
 
-		echo $path . "\n";
+        $proxy = static::getGitConfig(static::WEBDAV_CURL_PROXY);
 
-		$proxy = static::getGitConfig(static::WEBDAV_CURL_PROXY);
+        $ch = curl_init();
 
-		$ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_VERBOSE, false);
 
-		curl_setopt($ch, CURLOPT_URL, $url);
-		curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
-		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
-		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
-		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
-		curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-		curl_setopt($ch, CURLOPT_VERBOSE, false);
+        if (!empty($proxy)) {
+            curl_setopt($ch, CURLOPT_PROXY, $proxy);
+        }
 
-		if(!empty($proxy)){
-			curl_setopt($ch, CURLOPT_PROXY, $proxy);
-		}
+        $results = curl_exec($ch);
+        $info = curl_getinfo($ch);
 
-		$results = curl_exec($ch);
+        if (!empty($info["http_code"]) && !($info["http_code"] >= 200 && $info["http_code"] < 300)) {
+            echo sprintf("Did not recieve a success response from the WebDAV server. HTTP code (%s).\n", $info["http_code"]);
+            if ($info["http_code"] == 401) {
+                throw new \Exception("Ensure that your WebDAV credentials are correct.");
+            }
+        }
 
-		if(curl_errno($ch)){
-			echo "Error deleting file: " . $url . "\n";
-			print "Error: " . curl_error($ch); 
-			echo "\n";
-		}
+        if (curl_errno($ch)) {
+            echo "Error deleting file: " . $url . "\n";
+            print "Error: " . curl_error($ch);
+            echo "\n";
+        }
 
-		curl_close($ch);
-	}
+        curl_close($ch);
+    }
 
-	/**
-	 * Calls the WebDAV put method.
-	 * @param  String $url      The domain of the site to push to.
-	 * @param  String $path     The remote file path.
-	 * @param  String $localPath The local path to the file that should be uploaded.
-	 * @param  String $username The WebDAV username.
-	 * @param  String $password The WebDAV password.
-	 * @return null
-	 */
-	private static function putFile($url, $path, $localPath, $username, $password){
-		if(!preg_match("/^http/", $url)){
-			$url = "https://" . $url;
-		}
+    /**
+     * Calls the WebDAV put method.
+     * @param  String $url      The domain of the site to push to.
+     * @param  String $path     The remote file path.
+     * @param  String $localPath The local path to the file that should be uploaded.
+     * @param  String $username The WebDAV username.
+     * @param  String $password The WebDAV password.
+     * @return null
+     */
+    private static function putFile($url, $path, $localPath, $username, $password)
+    {
+        if (!preg_match("/^(http|https)/", $url)) {
+            $url = "https://" . $url;
+        }
 
-		$url = $url . "/" . $path;
+        $url = $url . "/" . $path;
 
-		$fileSize = filesize($localPath);
-		echo $localPath . " " . $fileSize . "\n";
-		
-		$fh_res = fopen($localPath, 'r');
+        $fileSize = filesize($localPath);
+        echo $localPath . " " . $fileSize . "\n";
+        
+        $fh_res = fopen($localPath, 'r');
 
-		if($fh_res){
-			$proxy = static::getGitConfig(static::WEBDAV_CURL_PROXY);
+        if ($fh_res) {
+            $proxy = static::getGitConfig(static::WEBDAV_CURL_PROXY);
 
-			$ch = curl_init();
-		
-			curl_setopt($ch, CURLOPT_URL, $url);
-			curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
-			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
-			curl_setopt($ch, CURLOPT_PUT, 1);
-			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
-			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
-			curl_setopt($ch, CURLOPT_TIMEOUT, 45);
-			curl_setopt($ch, CURLOPT_VERBOSE, false);
-				
-			curl_setopt($ch, CURLOPT_INFILE, $fh_res);
-			curl_setopt($ch, CURLOPT_INFILESIZE, $fileSize);
-			
-			if(!empty($proxy)){
-				curl_setopt($ch, CURLOPT_PROXY, $proxy);
-			}
+            $ch = curl_init();
+        
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_USERPWD, "{$username}:{$password}");
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+            curl_setopt($ch, CURLOPT_PUT, 1);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0); //Don't verify SSL peer.  This is insecure, but required on RightNow demo sites because of the SSL setup.
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 45);
+            curl_setopt($ch, CURLOPT_VERBOSE, false);
+                
+            curl_setopt($ch, CURLOPT_INFILE, $fh_res);
+            curl_setopt($ch, CURLOPT_INFILESIZE, $fileSize);
+            
+            if (!empty($proxy)) {
+                curl_setopt($ch, CURLOPT_PROXY, $proxy);
+            }
 
-			$results = curl_exec($ch);
-			if(curl_errno($ch)){
-				echo "Error putting file: " . $url . "\n";
-				print "Error: " . curl_error($ch); 
-				echo "\n";
-			}
+            $results = curl_exec($ch);
+            $info = curl_getinfo($ch);
 
-			curl_close($ch);
-			
-			fclose($fh_res);
-		} else{
-			throw new Exception("Unable to open file! " . $localPath);
-		}
-	}
+            if (!empty($info["http_code"]) && !($info["http_code"] >= 200 && $info["http_code"] < 300)) {
+                echo sprintf("Did not recieve a success response from the WebDAV server. HTTP code (%s).\n", $info["http_code"]);
+                if ($info["http_code"] == 401) {
+					throw new \Exception("Ensure that your WebDAV credentials are correct.");
+                }
+            }
+
+            if (curl_errno($ch)) {
+                echo "Error putting file: " . $url . "\n";
+                print "Error: " . curl_error($ch);
+                echo "\n";
+            }
+
+            curl_close($ch);
+            
+            fclose($fh_res);
+        } else {
+            throw new Error("Unable to open file! " . $localPath);
+        }
+    }
 }
 
 PostCommitHook::run();
